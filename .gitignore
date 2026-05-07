@@ -1,0 +1,35 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python bytecode and caches
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Coverage and build artifacts
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Environment files
+.env
+.env.local
+
+# Voice notes — never commit audio
+voicenotes/*
+!voicenotes/.gitkeep
+*.opus
+*.m4a
+*.ogg
+*.wav
+*.mp3
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
