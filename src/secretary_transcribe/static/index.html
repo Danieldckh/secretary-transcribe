@@ -73,13 +73,6 @@
 <div class="wrap">
   <header>
     <h1>Secretary Transcribe <span class="muted">— Afrikaans to English</span></h1>
-    <div class="key-row" id="keyRow">
-      <span id="keyHidden" class="hidden"><a class="linkbtn" id="changeKey">Change API key</a></span>
-      <span id="keyVisible">
-        <input id="apiKey" type="password" placeholder="API key" autocomplete="off" />
-        <button id="saveKey">Save key</button>
-      </span>
-    </div>
   </header>
 
   <div class="panel">
@@ -112,29 +105,11 @@
 </div>
 
 <script>
-  const STORAGE_KEY = "secretaryTranscribeApiKey";
+  window.__API_KEY__ = "__SECRETARY_API_KEY__";
   const $ = (id) => document.getElementById(id);
-  const keyVisible = $("keyVisible"), keyHidden = $("keyHidden");
-  const apiKeyInput = $("apiKey"), saveBtn = $("saveKey"), changeLink = $("changeKey");
   const drop = $("drop"), fileInput = $("fileInput");
   const fileInfo = $("fileInfo"), statusEl = $("status"), statusText = $("statusText"), errorEl = $("error");
   const results = $("results"), afEl = $("afrikaans"), enEl = $("english"), metaEl = $("meta");
-
-  function refreshKeyUI() {
-    const k = localStorage.getItem(STORAGE_KEY);
-    if (k) { keyVisible.classList.add("hidden"); keyHidden.classList.remove("hidden"); }
-    else { keyVisible.classList.remove("hidden"); keyHidden.classList.add("hidden"); apiKeyInput.focus(); }
-  }
-  saveBtn.addEventListener("click", () => {
-    const v = apiKeyInput.value.trim();
-    if (!v) return;
-    localStorage.setItem(STORAGE_KEY, v);
-    apiKeyInput.value = "";
-    refreshKeyUI();
-  });
-  apiKeyInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveBtn.click(); });
-  changeLink.addEventListener("click", () => { localStorage.removeItem(STORAGE_KEY); refreshKeyUI(); });
-  refreshKeyUI();
 
   function showError(msg) { errorEl.textContent = msg; errorEl.classList.remove("hidden"); }
   function clearError() { errorEl.classList.add("hidden"); errorEl.textContent = ""; }
@@ -162,8 +137,8 @@
     fileInfo.textContent = `${file.name} — ${fmtBytes(file.size)}`;
     fileInfo.classList.remove("hidden");
 
-    const key = localStorage.getItem(STORAGE_KEY);
-    if (!key) { showError("Please save your API key first."); return; }
+    const key = window.__API_KEY__;
+    if (!key) { showError("Server misconfigured: API_KEY env var is not set."); return; }
 
     const params = new URLSearchParams();
     if ($("cheap").checked) params.set("model", "mini");
@@ -182,7 +157,7 @@
       const data = ct.includes("application/json") ? await res.json() : { detail: await res.text() };
 
       if (!res.ok) {
-        if (res.status === 401) { showError("Invalid API key — please re-enter."); localStorage.removeItem(STORAGE_KEY); refreshKeyUI(); return; }
+        if (res.status === 401) { showError("Server's embedded API key was rejected — check Coolify env."); return; }
         const detail = typeof data.detail === "string" ? data.detail : (data.detail && data.detail.detail) || JSON.stringify(data.detail || data);
         showError(`${res.status}: ${detail}`);
         return;

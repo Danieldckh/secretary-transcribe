@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 import openai
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from secretary_transcribe.audio import FfmpegFailed, FfmpegMissing
@@ -44,8 +43,11 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/")
-async def index() -> FileResponse:
-    return FileResponse(str(_INDEX_HTML), media_type="text/html")
+async def index() -> Response:
+    html = _INDEX_HTML.read_text(encoding="utf-8")
+    api_key = os.environ.get("API_KEY", "")
+    html = html.replace("__SECRETARY_API_KEY__", api_key)
+    return Response(content=html, media_type="text/html")
 
 
 @app.post("/api/transcribe", dependencies=[Depends(require_api_key)])
