@@ -30,15 +30,15 @@ async def test_run_pipeline_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "secretary_transcribe.transcribe.transcribe_afrikaans", transcribe_mock
     )
-    translate_mock = AsyncMock(return_value=("Hello world", "gpt-4o"))
+    translate_mock = AsyncMock(return_value=("Hallo wereld (simpel)", "Hello world", "gpt-4o"))
     monkeypatch.setattr(
-        "secretary_transcribe.translate.translate_to_english", translate_mock
+        "secretary_transcribe.translate.simplify_and_translate", translate_mock
     )
 
     result = await run_pipeline(Path("fake.opus"))
 
     assert isinstance(result, PipelineResult)
-    assert result.afrikaans == "Hallo wereld"
+    assert result.afrikaans == "Hallo wereld (simpel)"
     assert result.english == "Hello world"
     assert result.duration_seconds == pytest.approx(4.2)
     assert result.model == "gpt-4o"
@@ -55,9 +55,9 @@ async def test_run_pipeline_cheap_uses_mini(monkeypatch: pytest.MonkeyPatch) -> 
         "secretary_transcribe.transcribe.transcribe_afrikaans",
         AsyncMock(return_value=_fake_whisper_response("Hallo", 1.0)),
     )
-    translate_mock = AsyncMock(return_value=("Hello", "gpt-4o-mini"))
+    translate_mock = AsyncMock(return_value=("Hallo", "Hello", "gpt-4o-mini"))
     monkeypatch.setattr(
-        "secretary_transcribe.translate.translate_to_english", translate_mock
+        "secretary_transcribe.translate.simplify_and_translate", translate_mock
     )
 
     result = await run_pipeline(Path("fake.opus"), cheap=True)
@@ -76,15 +76,16 @@ async def test_run_pipeline_custom_context(monkeypatch: pytest.MonkeyPatch) -> N
         "secretary_transcribe.transcribe.transcribe_afrikaans",
         AsyncMock(return_value=_fake_whisper_response("Sitrus uitvoer", 2.0)),
     )
-    translate_mock = AsyncMock(return_value=("Citrus exports", "gpt-4o"))
+    translate_mock = AsyncMock(return_value=("Sitrus uitvoer (simpel)", "Citrus exports", "gpt-4o"))
     monkeypatch.setattr(
-        "secretary_transcribe.translate.translate_to_english", translate_mock
+        "secretary_transcribe.translate.simplify_and_translate", translate_mock
     )
 
     custom = "discussion about citrus exports"
     result = await run_pipeline(Path("fake.opus"), context=custom)
 
     assert result.english == "Citrus exports"
+    assert result.afrikaans == "Sitrus uitvoer (simpel)"
     _, kwargs = translate_mock.await_args
     assert kwargs.get("context") == custom
 
@@ -100,9 +101,9 @@ async def test_run_pipeline_empty_transcription_raises(
         "secretary_transcribe.transcribe.transcribe_afrikaans",
         AsyncMock(return_value=_fake_whisper_response("   \n\t", 0.5)),
     )
-    translate_mock = AsyncMock(return_value=("should not be called", "gpt-4o"))
+    translate_mock = AsyncMock(return_value=("nooit", "should not be called", "gpt-4o"))
     monkeypatch.setattr(
-        "secretary_transcribe.translate.translate_to_english", translate_mock
+        "secretary_transcribe.translate.simplify_and_translate", translate_mock
     )
 
     with pytest.raises(RuntimeError, match="No speech"):

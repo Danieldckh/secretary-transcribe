@@ -49,13 +49,13 @@ async def run_pipeline(
     if not text.strip():
         raise RuntimeError("No speech detected in audio (empty transcription)")
 
-    english, model_name = await translate.translate_to_english(
+    simplified_af, english, model_name = await translate.simplify_and_translate(
         text, context=translation_context, cheap=cheap
     )
 
     return PipelineResult(
         duration_seconds=duration,
-        afrikaans=text.strip(),
-        english=english.strip(),
+        afrikaans=simplified_af,
+        english=english,
         model=model_name,
     )
