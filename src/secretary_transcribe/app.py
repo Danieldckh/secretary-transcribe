@@ -10,11 +10,13 @@ from typing import Literal
 import openai
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from secretary_transcribe.audio import FfmpegFailed, FfmpegMissing
 from secretary_transcribe.auth import require_api_key
 from secretary_transcribe.config import _ensure_dotenv_loaded
 from secretary_transcribe.pipeline import run_pipeline
+from secretary_transcribe.translate import detect_language, translate_text
 
 _ensure_dotenv_loaded()
 
@@ -132,3 +134,136 @@ async def transcribe(
             temp_path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+class TranslateRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    source_lang: Literal["auto", "en", "af"] = "auto"
+    target_lang: Literal["en", "af"]
+    model: Literal["full", "mini"] = "full"
+    context: str | None = None
+
+
+class TranslateResponse(BaseModel):
+    source_lang: Literal["en", "af"]
+    target_lang: Literal["en", "af"]
+    source_text: str
+    translated_text: str
+    model: str
+
+
+class DetectLanguageRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+
+
+class DetectLanguageResponse(BaseModel):
+    language: Literal["en", "af", "other"]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+@app.post(
+    "/api/translate",
+    dependencies=[Depends(require_api_key)],
+    response_model=TranslateResponse,
+)
+async def translate(body: TranslateRequest) -> TranslateResponse:
+    cheap = body.model == "mini"
+    started = time.monotonic()
+
+    try:
+        resolved_source: Literal["en", "af"]
+        if body.source_lang == "auto":
+            detected, _confidence, _detect_model = await detect_language(body.text)
+            resolved_source = "af" if detected == "af" else "en"
+        else:
+            resolved_source = body.source_lang
+
+        if resolved_source == body.target_lang:
+            elapsed = time.monotonic() - started
+            logger.info(
+                "translate short_circuit source=%s target=%s len=%d elapsed=%.2f",
+                resolved_source,
+                body.target_lang,
+                len(body.text),
+                elapsed,
+            )
+            return TranslateResponse(
+                source_lang=resolved_source,
+                target_lang=body.target_lang,
+                source_text=body.text,
+                translated_text=body.text,
+                model="passthrough",
+            )
+
+        translated_text, model_name = await translate_text(
+            body.text,
+            source_lang=resolved_source,
+            target_lang=body.target_lang,
+            cheap=cheap,
+            context=body.context,
+        )
+    except openai.APIError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "Upstream OpenAI error", "detail": str(exc)},
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001  unexpected path -> 500
+        logger.exception("translate unexpected_error")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Unexpected server error", "detail": str(exc)},
+        ) from exc
+
+    elapsed = time.monotonic() - started
+    logger.info(
+        "translate source=%s target=%s len=%d model=%s elapsed=%.2f",
+        resolved_source,
+        body.target_lang,
+        len(body.text),
+        model_name,
+        elapsed,
+    )
+    return TranslateResponse(
+        source_lang=resolved_source,
+        target_lang=body.target_lang,
+        source_text=body.text,
+        translated_text=translated_text,
+        model=model_name,
+    )
+
+
+@app.post(
+    "/api/detect-language",
+    dependencies=[Depends(require_api_key)],
+    response_model=DetectLanguageResponse,
+)
+async def detect_language_route(body: DetectLanguageRequest) -> DetectLanguageResponse:
+    started = time.monotonic()
+    try:
+        language, confidence, model_name = await detect_language(body.text)
+    except openai.APIError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "Upstream OpenAI error", "detail": str(exc)},
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001  unexpected path -> 500
+        logger.exception("detect_language unexpected_error")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Unexpected server error", "detail": str(exc)},
+        ) from exc
+
+    elapsed = time.monotonic() - started
+    logger.info(
+        "detect_language len=%d language=%s confidence=%.2f model=%s elapsed=%.2f",
+        len(body.text),
+        language,
+        confidence,
+        model_name,
+        elapsed,
+    )
+    return DetectLanguageResponse(language=language, confidence=confidence)

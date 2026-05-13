@@ -1,12 +1,116 @@
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from openai import AsyncOpenAI
+
+DetectedLanguage = Literal["en", "af", "other"]
+SourceLanguage = Literal["auto", "en", "af"]
+TargetLanguage = Literal["en", "af"]
+
+_DETECT_TEXT_LIMIT = 2000
 
 
 def _model_name(*, cheap: bool) -> str:
     return "gpt-4o-mini" if cheap else "gpt-4o"
+
+
+async def detect_language(text: str) -> tuple[DetectedLanguage, float, str]:
+    """Classify text language as en / af / other with a confidence score.
+
+    Uses gpt-4o-mini with strict JSON-mode. Returns (language, confidence, model).
+    """
+    model = "gpt-4o-mini"
+    snippet = text[:_DETECT_TEXT_LIMIT]
+    system_prompt = (
+        "You classify text language. Reply ONLY as JSON "
+        "{language: 'en'|'af'|'other', confidence: 0..1}."
+    )
+
+    client = AsyncOpenAI()
+    response = await client.chat.completions.create(
+        model=model,
+        temperature=0.0,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": snippet},
+        ],
+    )
+    raw = response.choices[0].message.content or "{}"
+    data = json.loads(raw)
+    language_raw = (data.get("language") or "other").strip().lower()
+    language: DetectedLanguage = (
+        language_raw if language_raw in ("en", "af", "other") else "other"
+    )  # type: ignore[assignment]
+    try:
+        confidence = float(data.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    return language, confidence, model
+
+
+async def translate_text(
+    text: str,
+    *,
+    source_lang: TargetLanguage,
+    target_lang: TargetLanguage,
+    cheap: bool = False,
+    context: str | None = None,
+) -> tuple[str, str]:
+    """Translate text between English and Afrikaans.
+
+    Tuned for South African agricultural terminology when target is Afrikaans
+    (e.g. 'stroper' for combine harvester, 'trekker' for tractor).
+    Returns (translated_text, model_name).
+    """
+    model = _model_name(cheap=cheap)
+
+    if target_lang == "af":
+        guidance = (
+            "Translate the user's text into natural, idiomatic Afrikaans as spoken by "
+            "South African farmers. Use authentic Afrikaans agricultural terminology "
+            "(e.g. 'stroper' for combine harvester, 'trekker' for tractor, 'implemente' "
+            "for implements, 'spuit' for sprayer, 'ploeg' for plough, 'oes' for harvest). "
+            "Prefer the natural Afrikaans word over a borrowed English term. Keep proper "
+            "nouns (names of people, companies, places, models) unchanged. Preserve every "
+            "fact, number, and idea. Do NOT summarize."
+        )
+        output_key = "afrikaans"
+    else:
+        guidance = (
+            "Translate the user's text into idiomatic, natural English. Match the source "
+            "tone (casual stays casual, formal stays formal). Keep proper nouns unchanged. "
+            "Preserve every fact, number, and idea. Do NOT summarize."
+        )
+        output_key = "english"
+
+    context_line = f"\nDomain context: {context}\n" if context else ""
+    system_prompt = (
+        f"{guidance}\n"
+        f"{context_line}"
+        "\n"
+        "Output ONLY a JSON object with EXACTLY this key: "
+        f"{{\"{output_key}\": \"...\"}}. "
+        "No preamble, no explanations, no extra keys, no markdown fences."
+    )
+
+    client = AsyncOpenAI()
+    response = await client.chat.completions.create(
+        model=model,
+        temperature=0.2,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text},
+        ],
+    )
+    raw = response.choices[0].message.content or "{}"
+    data = json.loads(raw)
+    translated = (data.get(output_key) or "").strip()
+    return translated, model
 
 
 async def fix_afrikaans_construction(
