@@ -60,13 +60,24 @@ def test_transcribe_unsupported_extension(client: TestClient, api_key: str) -> N
 
 
 def test_transcribe_too_large(client: TestClient, api_key: str) -> None:
-    big = b"\x00" * (25 * 1024 * 1024 + 1)
+    big = b"\x00" * (200 * 1024 * 1024 + 1)
     res = client.post(
         "/api/transcribe",
         headers={"X-API-Key": api_key},
         files={"file": ("big.m4a", io.BytesIO(big), "audio/mp4")},
     )
     assert res.status_code == 413
+
+
+def test_transcribe_25mb_now_accepted(client: TestClient, api_key: str) -> None:
+    """Files between the old 25 MB cap and the new 200 MB cap should now be accepted."""
+    payload = b"\x00" * (30 * 1024 * 1024)
+    res = client.post(
+        "/api/transcribe",
+        headers={"X-API-Key": api_key},
+        files={"file": ("medium.m4a", io.BytesIO(payload), "audio/mp4")},
+    )
+    assert res.status_code == 200, res.text
 
 
 def test_transcribe_no_speech(client: TestClient, api_key: str, mock_pipeline) -> None:

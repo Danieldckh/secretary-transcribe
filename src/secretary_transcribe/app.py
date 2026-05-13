@@ -22,7 +22,8 @@ ALLOWED_EXTS = {
     ".opus", ".ogg", ".m4a", ".mp3", ".mp4",
     ".mpeg", ".mpga", ".wav", ".webm", ".flac", ".aac",
 }
-MAX_BYTES = 25 * 1024 * 1024
+MAX_BYTES = 200 * 1024 * 1024
+MAX_MB = MAX_BYTES // (1024 * 1024)
 CHUNK_SIZE = 1024 * 1024
 
 _LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -85,7 +86,7 @@ async def transcribe(
         if too_large:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large: max {MAX_BYTES} bytes (25 MB)",
+                detail=f"File too large: max {MAX_BYTES} bytes ({MAX_MB} MB)",
             )
 
         started = time.monotonic()
