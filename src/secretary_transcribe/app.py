@@ -96,11 +96,6 @@ async def transcribe(
                 cheap=(model == "mini"),
                 context=context,
             )
-        except RuntimeError as exc:
-            msg = str(exc)
-            if "No speech detected" in msg:
-                raise HTTPException(status_code=422, detail=msg) from exc
-            raise
         except FfmpegMissing as exc:
             raise HTTPException(
                 status_code=500,
@@ -111,6 +106,11 @@ async def transcribe(
                 status_code=500,
                 detail=f"ffmpeg failed to process audio: {exc}",
             ) from exc
+        except RuntimeError as exc:
+            msg = str(exc)
+            if "No speech detected" in msg:
+                raise HTTPException(status_code=422, detail=msg) from exc
+            raise
         except openai.APIError as exc:
             raise HTTPException(
                 status_code=502,

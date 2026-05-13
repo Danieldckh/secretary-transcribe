@@ -50,7 +50,7 @@ async def run_pipeline(
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
-        normalized = tmp_dir / "audio.opus"
+        normalized = tmp_dir / "audio.ogg"
         audio.normalize_to_opus(audio_path, normalized)
 
         duration = audio.get_duration_seconds(normalized)

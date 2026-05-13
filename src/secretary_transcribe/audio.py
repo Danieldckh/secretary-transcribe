@@ -106,7 +106,7 @@ def split_into_chunks(
         start = i * stride
         if start >= duration:
             break
-        chunk_path = output_dir / f"chunk_{i:04d}.opus"
+        chunk_path = output_dir / f"chunk_{i:04d}.ogg"
         _run([
             "ffmpeg",
             "-y",
